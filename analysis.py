@@ -1,4 +1,5 @@
 # analysis.py analysis functions to support ButterfliesByTemplate.py
+import math
 import numpy as np
 import cv2
 import mahotas as mh
@@ -146,12 +147,12 @@ def create_hist_dict(butterfly, normed_pack, index):
 	    h[key] = cv2.calcHist([f.astype('uint8')],[0],mask,[256],[0,256])
 	return h
 
-def compare_hists(d, butterflies, normed):
+def compare_hists(d, butterfly, normed):
     r = 4912/800.
     comp_chisqr = {}
     comp_corr = {}
     ssim = {}
-    (x1,y1,x2,y2,_,_) = butterflies[d['i']]
+    x1,y1,x2,y2,_,_ = butterfly
     d_list = list(enumerate(d.iteritems()))
     for ind,(k1,hist1) in d_list:
         if k1 is not 'i':

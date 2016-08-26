@@ -1,4 +1,4 @@
-# ProgressBar.py ; self-explanitory 
+'''ProgressBar.py ; self-explanitory'''
 import time
 import sys
 
