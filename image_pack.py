@@ -1,6 +1,7 @@
 # image_pack.py: handle packing of images from files and drawing functions
 
 import cv2
+import os
 import numpy as np
 
 DRAW_ALL = -1
@@ -23,9 +24,10 @@ class image_pack:
         self.color = {}
         self.gray = {}                   
         for key,path in path_dict.iteritems():
-            im = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
+            im = cv2.imread(os.getcwd() + '/' + path)
             if im is None:
-                raise IOError('invalid image path passed')
+                raise IOError('invalid image path passed:' + os.getcwd() + '/' + path)
+            im = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
             im = np.rot90(im, 3)
             if w != 0:
                 dim = (w, int(im.shape[0] * (float(w) / im.shape[1])))

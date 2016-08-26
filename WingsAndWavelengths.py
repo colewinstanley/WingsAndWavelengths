@@ -19,14 +19,15 @@ from image_pack import image_pack, draw_cont_from_arr, draw_rect_from_arr
 import analysis
 from ProgressBar import progress, startProgress, endProgress
 
-thresh_temp_folder = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/temps/thresh_temps'
-temp_folder = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/temps/working_template'
-vis_path = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/test_images/73/DSC_0073.jpg'
-fluor_path = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/test_images/73/DSC_0076.jpg'
-uv_path = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/test_images/73/DSC_0077.jpg'
-near_ir_path = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/test_images/73/DSC_0074.jpg'
-ir_path = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/test_images/73/DSC_0075.jpg'
-results_folder = '/Users/colewinstanley/Desktop/ShDet_Temp_Sandbox/results'
+# temporary paths for testing until real file uptake is implemented
+thresh_temp_folder = 'temps/thresh_temps'
+temp_folder = 'temps/working_template'
+vis_path = 'test_images/73/jpg/DSC_0073.jpg'
+fluor_path = 'test_images/73/jpg/DSC_0076.jpg'
+uv_path = 'test_images/73/jpg/DSC_0077.jpg'
+near_ir_path = 'test_images/73/jpg/DSC_0074.jpg'
+ir_path = 'test_images/73/jpg/DSC_0075.jpg'
+results_folder = 'results'
 
 LOAD_TEMPS = True
 ADD_TEMP_NAME = True
@@ -77,17 +78,27 @@ def compare_contrast_wrapper(butterfly, index, bg, pack_full_gray, crops_dirc):
 
 def main():
     start = time.time()
+    cwd = os.getcwd() + '/'
     print "retrieving images..."
+    # imLoadPool = Pool(processes=2)
+    # imgc_res = imLoadPool.apply_async(image_pack, 
+    #                                   args=(vis_path, fluor_path, uv_path, near_ir_path, ir_path, 800))
+    # img_full_res = imLoadPool.apply_async(image_pack,
+    #                                       args=(vis_path, fluor_path, uv_path, near_ir_path, ir_path))
+    # imLoadPool.close()
+    # imgc = imgc_res.get()
+    # img_full = img_full.get()
+    # imLoadPool.join()
     imgc = image_pack(vis_path, fluor_path, uv_path, near_ir_path, ir_path, 800)
     img_full = image_pack(vis_path, fluor_path, uv_path, near_ir_path, ir_path)  #w=4912
-    print "Done."
+    print "Done: " + str(time.time() - start)[:5] + " sec"
 
     if LOAD_TEMPS:
-        loadTemps(temp_folder, thresh_temp_folder)
+        loadTemps(cwd + temp_folder, cwd + thresh_temp_folder)
 
     detectionPool = Pool(processes=3)
     # res_temps = detectionPool.apply_async(getSizedTemps, args=(thresh_temp_folder,))
-    templates = getSizedTemps(thresh_temp_folder)
+    templates = getSizedTemps(cwd + thresh_temp_folder)
     res_but = detectionPool.apply_async(detectButterflies,
                                         args=(imgc.color['vis'].dumps(), templates))
     # res_tr = detectionPool.apply_async(detectTrays, args=(imgc.color['vis'].dumps(),))
@@ -114,7 +125,7 @@ def main():
     draw_rect_from_arr(im_rects, butterflies, ADD_TEMP_NAME, ADD_INDEX, td=tray_dict)
     draw_cont_from_arr(im_trays, trays)
 
-    crops_dirc = results_folder + '/crops'
+    crops_dirc = cwd + results_folder + '/crops'
     if not os.path.exists(crops_dirc):
         os.makedirs(crops_dirc)
 
@@ -191,14 +202,14 @@ def main():
     cont_results = [compare_contrast_wrapper(butterfly, i, bg, img_full.gray, crops_dirc)
                     for i, butterfly in enumerate(butterflies)]
     keypoints = {t[0]:t[1] for t in cont_results}
-    cont_totals = {t[0]:t[1] for t in cont_results}
+    cont_totals = {t[0]:t[2] for t in cont_results}
     # contrastPool.close()
     # contrastPool.join()
     endProgress()
 
 
     output_report = 'report.csv'
-    os.chdir(results_folder)
+    os.chdir(cwd + results_folder)
     with open(output_report, 'w') as outfile:               # create run report file
         writer = csv.writer(outfile, quoting=csv.QUOTE_ALL)
         writer.writerow(["time of run:", datetime.datetime.now()])
