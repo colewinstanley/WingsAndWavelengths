@@ -2,7 +2,6 @@
 import math
 import numpy as np
 import cv2
-import mahotas as mh
 from skimage.measure import compare_ssim
 from ProgressBar import *
 
@@ -91,14 +90,14 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
                 except IndexError:
                     pass
     # show(img2)
-    b250 = 250 - mh.gaussian_filter(b.astype('uint8')*250, dist/2.42).astype('uint8')
+    b250 = 250 - cv2.GaussianBlur(b.astype('uint8')*250, (0,0) sigmaX=dist/2.42).astype('uint8')
 
     det_params = cv2.SimpleBlobDetector_Params()
     det_params.minThreshold = 15
     det_params.maxThreshold = 125
     det_params.filterByArea = True
     det_params.minArea = 15
-    det_params.filterByInertia = True
+    det_params.filterByInertia = False
     det_params.minInertiaRatio = 0.075
     det_params.minDistBetweenBlobs = 10
 
@@ -129,9 +128,9 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
 def norm_pack(pack_full_gray):
 	normed = {}
 	j = 0.
-	l = len(pack_full_gray)
+	length = len(pack_full_gray)
 	for key,im in pack_full_gray.iteritems():        #also adds the gray vis "normed" as itself
-	    progress(100 * (j / l))
+	    progress(100 * (j / length))
 	    normed[key] = normalize_against(pack_full_gray['vis'], im)
 	    j += 1
 	return normed
