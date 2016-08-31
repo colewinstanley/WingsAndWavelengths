@@ -5,6 +5,8 @@ import cv2
 from skimage.measure import compare_ssim
 from ProgressBar import *
 
+SAME_AS_SOURCE = -1
+
 def normalize_against(standard, image):     # eventually do this against the gray card or actual standard
     rand = np.random.rand(*np.shape(image))     # noise introduced within each bit to smooth over 8-bit to 32-bit conversion
     standard_mean, standard_dev = cv2.meanStdDev(standard)  # so histograms using this function are smooth, not comb-like
@@ -64,7 +66,7 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
     img1_border[border:shape[0]+border, border:shape[1]+border] = img1
     img2_border[border:shape[0]+border, border:shape[1]+border] = img2
     vi = vi[dist:shape[0]-dist, dist:shape[1]-dist]
-    hi_vis_t = np.ones((shape[0]-(dist*2), shape[1]-(dist*2)))
+    hi_vis_t = np.ones((shape[0]-(dist*2), shape[1]-(dist*2))).astype('bool')
     for d, coor in dirs.iteritems():            # generates noise at edges...
         grads1[d] = np.absolute(img1 - img1_border[border+coor[0]:shape[0]+border+coor[0], border+coor[1]:shape[1]+border+coor[1]])
         grads2[d] = np.absolute(img2 - img2_border[border+coor[0]:shape[0]+border+coor[0], border+coor[1]:shape[1]+border+coor[1]])
@@ -90,12 +92,12 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
                 except IndexError:
                     pass
     # show(img2)
-    b250 = 250 - cv2.GaussianBlur(b.astype('uint8')*250, (0,0) sigmaX=dist/2.42).astype('uint8')
+    b250 = 250 - cv2.GaussianBlur(b.astype('uint8')*250, (0,0), sigmaX=dist/2.42).astype('uint8')
 
     det_params = cv2.SimpleBlobDetector_Params()
     det_params.minThreshold = 15
     det_params.maxThreshold = 125
-    det_params.filterByArea = True
+    det_params.filterByArea = False
     det_params.minArea = 15
     det_params.filterByInertia = False
     det_params.minInertiaRatio = 0.075
@@ -160,6 +162,20 @@ def compare_hists(d, butterfly, normed):
                 if (k1 != k2) and (k2 is not 'i'):
                     comp_chisqr[k1 + ":" + k2] = cv2.compareHist(d[k1], d[k2], cv2.cv.CV_COMP_CHISQR)
                     comp_corr[k1 + ":" + k2] = cv2.compareHist(d[k1], d[k2], cv2.cv.CV_COMP_CORREL)
-                    ssim[k1 + ":" + k2] = compare_ssim(normed[k1][int(y1*r):int(y2*r),int(x1*r):int(x2*r)]
-                                                      ,normed[k2][int(y1*r):int(y2*r),int(x1*r):int(x2*r)])
+                    ssim[k1 + ":" + k2] = compare_ssim(cv2.resize(
+                    	normed[k1][int(y1*r):int(y2*r),int(x1*r):int(x2*r)], (0,0), fx=0.4, fy=0.4)
+                                                      ,cv2.resize(
+                        normed[k2][int(y1*r):int(y2*r),int(x1*r):int(x2*r)], (0,0), fx=0.4, fy=0.4))
     return d['i'], comp_chisqr, comp_corr, ssim         # (str, dict, dict, dict)
+
+def locmax(im):		# im must be uint8 or int16 or uint16
+	kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3,3))
+	kernel[1][1] = 0
+	locmax = np.zeros(np.shape(im)).astype('bool')
+	for i in range(0, 256):
+		imc = im.copy().astype('int16') - i
+		imc *= (imc > 0) & np.logical_not(locmax)
+		imf = cv2.filter2D(imc, SAME_AS_SOURCE, kernel)
+		locmax |= ((imf <= 1) & (imc > 0))
+	return locmax
+

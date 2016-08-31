@@ -12,7 +12,7 @@ from multiprocessing import Pool
 
 import cv2
 from matplotlib import pyplot as plt
-# import numpy as np # actually only used for pickling in process pools
+import numpy as np # actually only used for pickling in process pools
 
 from ButterfliesByTemplate import loadTemps, getSizedTemps, detectButterflies, detectTrays
 from image_pack import image_pack, draw_cont_from_arr, draw_rect_from_arr
@@ -32,6 +32,26 @@ results_folder = 'results'
 LOAD_TEMPS = True
 ADD_TEMP_NAME = True
 ADD_INDEX = True
+
+FLAG_IR_FLUOR_CCORR = 0.40
+FLAG_IR_FLUOR_CHISQR = 1900000
+FLAG_CONTRAST_LEVEL = 4.00
+    
+# def hist_curve(im):     # to eventually replace matplotlib
+#     h = np.zeros((300,256,3))
+#     if len(im.shape) == 2:
+#         color = [(255,255,255)]
+#     elif im.shape[2] == 3:
+#         color = [ (255,0,0),(0,255,0),(0,0,255) ]
+#     for ch, col in enumerate(color):
+#         hist_item = cv2.calcHist([im],[ch],None,[256],[0,256])
+        # print np.amax(hist_item)
+#         cv2.normalize(hist_item,hist_item,0,255,cv2.NORM_MINMAX)
+#         hist=np.int32(np.around(hist_item))
+#         pts = np.int32(np.column_stack((bins,hist)))
+#         cv2.polylines(h,[pts],False,col)
+#     y=np.flipud(h)
+#     return y
 
 def subtract_save(key, im, crops_dirc, butterflies):
     '''Save the crops of the subtraction operation into the crop folders
@@ -150,7 +170,7 @@ def main():
     cv2.imwrite("tray_key.jpg", cv2.cvtColor(im_trays, cv2.COLOR_BGR2RGB))
     endProgress()
 
-    flag_list = ['no_var_sig', 'hi_vis_uv', 'hi_fluor', 'ssim']
+    flag_list = ['no_var_sig', 'cont_total', 'hi_fluor', 'ssim']
 
     # 2D dictionary of flags
     flags = {i:{flag: False for flag in flag_list} for i, _ in enumerate(butterflies)}
@@ -162,6 +182,10 @@ def main():
     startProgress("subtractive      (2 of 4)")
     j = 0.
     subt = analysis.subtractive(normed, img_full.gray['vis'])
+
+    # list comprehension is used in many of the following operations to make multi-
+    # processing easier if it needs to be implemented
+
     # subtractivePool = Pool(processes=5)
     # subtractivePool.map_async(subtract_save, ((key,im.dumps(),
                                         #       crops_dirc) for key,im in subt.iteritems()))
@@ -182,9 +206,10 @@ def main():
     hist_results = [analysis.compare_hists(d, butterflies[d['i']], normed) for d in hists]
     hists_compare_chisqr = {t[0]:t[1] for t in hist_results}
     hists_compare_corr = {t[0]:t[2] for t in hist_results}
-    ssims = {t[0]:t[3] for t in hist_results}
+    ssims = {t[0]:t[3] for t in hist_results}       # SSIM usable only without focus shift
     for k, d in hists_compare_corr.iteritems():
-        if d['ir:fluor'] > 0.45:
+        if ((d['ir:fluor'] > FLAG_IR_FLUOR_CCORR) 
+                & (hists_compare_chisqr[k]['ir:fluor'] < FLAG_IR_FLUOR_CHISQR)):
             flags[k]['no_var_sig'] = True
     # histogramPool.close()
     # # subtractivePool.join()
@@ -203,6 +228,9 @@ def main():
                     for i, butterfly in enumerate(butterflies)]
     keypoints = {t[0]:t[1] for t in cont_results}
     cont_totals = {t[0]:t[2] for t in cont_results}
+    for k, val in cont_totals.iteritems():
+        if val > FLAG_CONTRAST_LEVEL:
+            flags[k]['cont_total'] = True
     # contrastPool.close()
     # contrastPool.join()
     endProgress()
@@ -215,17 +243,17 @@ def main():
         writer.writerow(["time of run:", datetime.datetime.now()])
         writer.writerow(["number of butterflies:", len(butterflies)])
         writer.writerow([''])
-        writer.writerow(['key #', 'keypoint x', 'keypoint y', 'confidence', 'total contrast level'])
+        writer.writerow(['key #', 'keypoint x', 'keypoint y', 'confidence', 'total contrast level', 'contrast flag'])
         for i, _ in enumerate(butterflies):         # range??
             for j, k in enumerate(keypoints[i]):
                 if j == 0:
                     writer.writerow([i+1, int(k.pt[0]), int(k.pt[1]),
-                                     str(k.size)[:5], cont_totals[i]])
+                                     str(k.size)[:5], cont_totals[i], flags[i]['cont_total']])
                 else:
                     writer.writerow(['', int(k.pt[0]), int(k.pt[1]), str(k.size)[:5]])
         writer.writerow([''])
         writer.writerow(['key #', 'histogram pair', 'chi-square', 'correlation',
-                         'structural similarity', 'negative flag'])
+                         'structural similarity', 'no sig. variation'])
         for i, d in hists_compare_chisqr.iteritems():
             for ii, (key, val) in enumerate(hists_compare_chisqr[i].iteritems()):
                 if ii == 0:

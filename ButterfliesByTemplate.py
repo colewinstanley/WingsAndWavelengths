@@ -8,7 +8,7 @@ import math
 import cv2
 import numpy as np
 import mahotas as mh
-# from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt
 
 from skimage.morphology import skeletonize as skim_skeletonize
 
@@ -36,7 +36,7 @@ MAX_4TH_LARGER = 510
 
 DRAW_ALL = -1
 
-# need eventually to update the hash tables / have separate ones for different types (e.g. skippers)
+# TODO need eventually to update the hash tables / have separate ones for different types (e.g. skippers)
 
 dHash_table = np.array([ 0.12,  0.,    0.12,  0.02,  0.18,  0.42,  0.4,   0.7,   0.02,  0.,    0.08,  0.04,
                          0.1,   0.3,   0.36,  0.96,  0.7,   0.96,  0.58,  0.44,  0.38,  0.66,  0.92,  0.98,
@@ -51,6 +51,10 @@ pHash_table = np.array([ 1.,    0.6,   1.,    0.14,  0.96,  0.56,  0.88,  0.24, 
                          0.04,  0.42,  0.02,  0.08,  0.48,  0.24,  0.54,  0.28,  0.46,  0.28,  0.4,   0.46,
                          0.9,   0.3,   0.14,  0.06,  0.76,  0.14,  0.4,   0.68,  0.4,   0.2,   0.42,  0.44,
                          0.4,   0.4,   0.48,  0.16])
+
+def show(img):
+    plt.imshow(img)
+    # plt.show()
 
 def adaptive_3channel_thresh(img, window=611):
     channels = cv2.split(img)
@@ -197,7 +201,7 @@ def findTrays(conts):
             rect = cv2.minAreaRect(c)
             angleFlag = False
             for p in range(-2,3):           # proabably unnecessarily large range
-                if (90*p + 16) < rect[2] < (90*p + 74):
+                if (90*p + 10) < rect[2] < (90*p + 80):
                     angleFlag = True
             if angleFlag:
                 continue
@@ -242,9 +246,10 @@ def detectTrays(image_pickle):        # returns contour list of trays and tray l
     trays = []
     
     edges = cv2.Canny(image.copy(), 100, 200)
-    edges_blur5 = mh.gaussian_filter(edges.astype('uint8')*250, 4.15)
+    edges_blur5 = cv2.GaussianBlur(edges.astype('float'), (0,0), sigmaX=4.15)
+    # edges_blur5 = mh.gaussian_filter(edges.astype('uint8')*250, 4.15)
     
-    edges_blur5_thr = cv2.adaptiveThreshold((edges_blur5*120).astype('uint8'), 1, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 43, 0)
+    edges_blur5_thr = cv2.adaptiveThreshold((edges_blur5).astype('uint8'), 1, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 43, 0)
     y,x = edges_blur5_thr.shape
     edges_blur5_thr[0:4] = 1
     edges_blur5_thr[y-4:y] = 1
@@ -332,7 +337,7 @@ def detectButterflies(image_pickle, temps):
     for t in temps:
         width_flag = (t[2] < FLAG_WIDTH or t[3] < FLAG_WIDTH)
         results = cv2.matchTemplate(img.astype('uint8'), np.loads(t[0]), cv2.TM_SQDIFF_NORMED)
-        resultsf = mh.gaussian_filter(results, BLUR_LEVEL)
+        resultsf = cv2.GaussianBlur(results, (0,0), sigmaX=BLUR_LEVEL)
         rmin = mh.regmin(resultsf)
         h, w = t[2], t[3]           
         loc = np.where(rmin)
@@ -349,7 +354,7 @@ def detectButterflies(image_pickle, temps):
     for t in temps:
         width_flag = (t[2] < FLAG_WIDTH or t[3] < FLAG_WIDTH)
         results = cv2.matchTemplate(img.astype('uint8'), np.loads(t[0]), cv2.TM_SQDIFF_NORMED)
-        resultsf = mh.gaussian_filter(results, BLUR_LEVEL)
+        resultsf = cv2.GaussianBlur(results, (0,0), sigmaX=BLUR_LEVEL)
         rmin = mh.regmin(resultsf)
         h, w = t[2], t[3]
         loc = np.where(rmin)
