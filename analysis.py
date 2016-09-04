@@ -2,10 +2,16 @@
 import math
 import numpy as np
 import cv2
+import time
 from skimage.measure import compare_ssim
+from scipy.ndimage.filters import minimum_filter
 from ProgressBar import *
 
 SAME_AS_SOURCE = -1
+SOBEL_X = 0
+SOBEL_Y = 1
+REG_MIN = 0
+REG_MAX = 1
 
 def normalize_against(standard, image):     # eventually do this against the gray card or actual standard
     rand = np.random.rand(*np.shape(image))     # noise introduced within each bit to smooth over 8-bit to 32-bit conversion
@@ -44,6 +50,7 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
     checks only for higher contrast in img2
     unitt is the boolean image of the bg of the butterfly/
     used w red in fluor image"""
+    start = time.time()
     border = dist*2
     vi = img1.copy()
     fl = img2.copy()        # memory?
@@ -78,6 +85,9 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
         subs[d] = grads2[d] - grads1[d]
         hi_vis = grads1[d] < vis_lower
         hi_vis_t *= hi_vis
+
+    print "1", time.time() - start
+    start = time.time()
     for d, coor in dirs.iteritems():
         subs[d] *= hi_vis_t
         loc = np.where(subs[d] > threshold)
@@ -91,17 +101,19 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
                     b[ept[::-1]] = True
                 except IndexError:
                     pass
+    print "2", time.time() - start
     # show(img2)
     b250 = 250 - cv2.GaussianBlur(b.astype('uint8')*250, (0,0), sigmaX=dist/2.42).astype('uint8')
 
     det_params = cv2.SimpleBlobDetector_Params()
-    det_params.minThreshold = 15
+    det_params.minThreshold = 0
     det_params.maxThreshold = 125
     det_params.filterByArea = False
     det_params.minArea = 15
-    det_params.filterByInertia = False
+    det_params.filterByInertia = True
     det_params.minInertiaRatio = 0.075
-    det_params.minDistBetweenBlobs = 10
+    det_params.minDistBetweenBlobs = 55
+    det_params.filterByConvexity = False
 
     detector = cv2.SimpleBlobDetector(det_params)
     kpts = detector.detect(b250)
@@ -168,14 +180,45 @@ def compare_hists(d, butterfly, normed):
                         normed[k2][int(y1*r):int(y2*r),int(x1*r):int(x2*r)], (0,0), fx=0.4, fy=0.4))
     return d['i'], comp_chisqr, comp_corr, ssim         # (str, dict, dict, dict)
 
-def locmax(im):		# im must be uint8 or int16 or uint16
-	kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3,3))
-	kernel[1][1] = 0
-	locmax = np.zeros(np.shape(im)).astype('bool')
-	for i in range(0, 256):
-		imc = im.copy().astype('int16') - i
-		imc *= (imc > 0) & np.logical_not(locmax)
-		imf = cv2.filter2D(imc, SAME_AS_SOURCE, kernel)
-		locmax |= ((imf <= 1) & (imc > 0))
-	return locmax
+def regminmax(im, dim, min_max):		# im must be uint8 or int16 or uint16
+	BETA = 256
+	sobel_mag = cv2.magnitude(sobel(im, 5, SOBEL_X), sobel(im, 5, SOBEL_Y))
+	laplacian = laplacian_approx(im, 21, min_max)
+	sobel_mag = cv2.normalize(sobel_mag, alpha=0, beta=BETA, norm_type=cv2.NORM_MINMAX) # use range in boolean instead?
+	# laplacian = cv2.normalize(laplacian, alpha=-BETA, beta=BETA, norm_type=cv2.NORM_MINMAX)
+	peak_minima = minimum_filter(sobel_mag, 17)
+	# where:
+	# 1. pix is min in neighborhood, 2. pix sobel is > highest sobel/5, 3, concave correct
+	peak_real_minima = (peak_minima == sobel_mag) * (sobel_mag < BETA/5) * (laplacian > 0.0025)
+	return np.where(peak_real_minima)
+
+def laplacian_approx(im, ksize, min_max):		# targets -> positive
+	kernel1D = cv2.getGaussianKernel(ksize, 4.5) - cv2.getGaussianKernel(ksize, 2.5)
+	if min_max == REG_MAX:
+		kernel1D = -kernel1D
+	elif min_max != REG_MIN:
+		raise ValueError("invalid REG_MIN/REG_MAX")
+	print "l", kernel1D
+	return cv2.sepFilter2D(im, cv2.CV_32F, kernel1D, kernel1D)
+
+def sobel(im, ksize, axis):
+	if axis == SOBEL_X:
+		kernelX = np.array(range((1-ksize)/2, (ksize+1)/2))
+		kernelY = cv2.getGaussianKernel(ksize, -1)
+	elif axis == SOBEL_Y:
+		kernelY = np.array(range((1-ksize)/2, (ksize+1)/2))
+		kernelX = cv2.getGaussianKernel(ksize, -1)
+	else:
+		raise ValueError("invalid Sobel axis")
+	return cv2.sepFilter2D(im, cv2.CV_32F, kernelX, kernelY)
+
+def hessian_matrix(im, ksize_first, ksize_second):
+	fx = sobel(im, ksize_first, SOBEL_X)
+	fy = sobel(im, ksize_first, SOBEL_Y)
+	fxx = sobel(fx, ksize_second, SOBEL_X)
+	fyy = sobel(fy, ksize_second, SOBEL_Y)
+	fxy = sobel(fx, ksize_second, SOBEL_Y)
+	return fxx + fyy - 2*fxy
+
+
 
