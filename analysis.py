@@ -91,7 +91,6 @@ def coarse_contrast(img1, img2, unitt, dist, threshold, vis_lower):          # s
     for d, coor in dirs.iteritems():
         subs[d] *= hi_vis_t
         loc = np.where(subs[d] > threshold)
-        redloc = zip(*np.where(unitt)[::-1])
         for pt in zip(*loc[::-1]):
             ept = (pt[0] + dirs[d][1], pt[1] + dirs[d][0])
             if not unitt[pt[::-1]] and not unitt[ept[::-1]]:
@@ -184,8 +183,9 @@ def regminmax(im, dim, min_max):
 	''' regminmax(...): take image and find regional maxima, mostly based on overall image
 		structure but also on the kernel size specified in dim param. This function uses 
 		Sobel approximations for derivatives (defined in separate function) rather than gradients.
+		Performance of this function is nearly identical to mh.regmin/mh.regmax
 		args:
-		  im (numpy.ndarray): grayscale image input as numpy.ndarray. must be uint8, 
+		  im (numpy.ndarray): grayscale image input as numpy.ndarray. Must be uint8, 
 		  	  int16, or uint16
 		  dim (int): kernel size for derivative approximations. In theory, this only matters for 
 		  	  image smoothing; that is, a noiseless image should produce identical results 
@@ -198,10 +198,10 @@ def regminmax(im, dim, min_max):
 	'''
 	BETA = 256
 	sobel_mag = cv2.magnitude(sobel(im, 5, SOBEL_X), sobel(im, 5, SOBEL_Y))
-	hessian = hessian_matrix(im, 19, 9)
+	hessian = hessian_matrix(im, ((dim/4)*2)+1, dim)		# weird math to get odd number
 	sobel_mag = cv2.normalize(sobel_mag, alpha=0, beta=BETA, norm_type=cv2.NORM_MINMAX) # use range in boolean instead?
 	# laplacian = cv2.normalize(laplacian, alpha=-BETA, beta=BETA, norm_type=cv2.NORM_MINMAX)
-	peak_minima = minimum_filter(sobel_mag, 17)
+	peak_minima = minimum_filter(sobel_mag, dim)
 	# where:
 	# 1. pix is min in neighborhood, 2. pix sobel is > highest sobel/5, 3, concave correct
 	return (peak_minima == sobel_mag) * (sobel_mag < BETA/5) * (hessian > 0.0025)
@@ -234,6 +234,4 @@ def hessian_matrix(im, ksize_first, ksize_second):
 	fyy = sobel(fy, ksize_second, SOBEL_Y)
 	fxy = sobel(fx, ksize_second, SOBEL_Y)
 	return fxx + fyy - 2*fxy
-
-
 

@@ -14,6 +14,7 @@ from skimage.morphology import skeletonize as skim_skeletonize
 
 # from analysis import *       # analysis functions in separate file
 from ProgressBar import progress, startProgress, endProgress
+from analysis import regminmax, REG_MIN, REG_MAX
 
 TEMP_WIDTH = 50
 TEMPL_THRESHOLD = 0.53        # threshold for template matching
@@ -74,6 +75,8 @@ def adaptive_3channel_thresh(img, window=611):
 def create_thresh_temp(temp, save=None, folder=None):
     bool_ch = (temp > mh.thresholding.otsu(temp))
     r,g,b = cv2.split(bool_ch.astype('uint8'))
+    # r, g, b = cv2.split(temp)
+    # _, bool_ch = cv2.threshold()
     l = r & g & b  #numpy magic 
     if save is not None:
         os.chdir(folder)
@@ -247,7 +250,6 @@ def detectTrays(image_pickle):        # returns contour list of trays and tray l
     
     edges = cv2.Canny(image.copy(), 100, 200)
     edges_blur5 = cv2.GaussianBlur(edges.astype('float'), (0,0), sigmaX=4.15)
-    # edges_blur5 = mh.gaussian_filter(edges.astype('uint8')*250, 4.15)
     
     edges_blur5_thr = cv2.adaptiveThreshold((edges_blur5).astype('uint8'), 1, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 43, 0)
     y,x = edges_blur5_thr.shape
@@ -338,13 +340,14 @@ def detectButterflies(image_pickle, temps):
         width_flag = (t[2] < FLAG_WIDTH or t[3] < FLAG_WIDTH)
         results = cv2.matchTemplate(img.astype('uint8'), np.loads(t[0]), cv2.TM_SQDIFF_NORMED)
         resultsf = cv2.GaussianBlur(results, (0,0), sigmaX=BLUR_LEVEL)
-        rmin = mh.regmin(resultsf)
-        h, w = t[2], t[3]           
-        loc = np.where(rmin)
+        rmin = regminmax(resultsf, 9, REG_MIN)
+        h, w = t[2], t[3]
+        thr = (resultsf < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT))
+        loc = np.where(rmin*thr)
         for pt in zip(*loc[::-1]):
             q = resultsf[pt[1]][pt[0]]
-            if q < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT):
-                append_anti_alias(butterflies, (pt[0], pt[1], pt[0]+w, pt[1]+h, q, t[4]), image_unpickle) #format x1, y1, x2, y2, quality
+            # if q < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT):
+            append_anti_alias(butterflies, (pt[0], pt[1], pt[0]+w, pt[1]+h, q, t[4]), image_unpickle) #format x1, y1, x2, y2, quality
         j += 1
         progress(50.*j/len(temps))
     
@@ -355,13 +358,14 @@ def detectButterflies(image_pickle, temps):
         width_flag = (t[2] < FLAG_WIDTH or t[3] < FLAG_WIDTH)
         results = cv2.matchTemplate(img.astype('uint8'), np.loads(t[0]), cv2.TM_SQDIFF_NORMED)
         resultsf = cv2.GaussianBlur(results, (0,0), sigmaX=BLUR_LEVEL)
-        rmin = mh.regmin(resultsf)
+        rmin = regminmax(resultsf, 9, REG_MIN)
         h, w = t[2], t[3]
-        loc = np.where(rmin)
+        thr = (resultsf < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT))
+        loc = np.where(rmin*thr)
         for pt in zip(*loc[::-1]):      
             q = resultsf[pt[1]][pt[0]]
-            if q < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT):
-                append_anti_alias(butterflies, (pt[1], (wimg-1)-(pt[0]), pt[1]+h, (wimg-1)-(pt[0]+w), q, t[4]), image_unpickle) #format x1, y1, x2, y2, quality
+            # if q < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT):
+            append_anti_alias(butterflies, (pt[1], (wimg-1)-(pt[0]), pt[1]+h, (wimg-1)-(pt[0]+w), q, t[4]), image_unpickle) #format x1, y1, x2, y2, quality
                                                                         #order of y switched from before because of flip and sorter
         j += 1
         progress(50.*j/len(temps))
