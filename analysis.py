@@ -180,17 +180,32 @@ def compare_hists(d, butterfly, normed):
                         normed[k2][int(y1*r):int(y2*r),int(x1*r):int(x2*r)], (0,0), fx=0.4, fy=0.4))
     return d['i'], comp_chisqr, comp_corr, ssim         # (str, dict, dict, dict)
 
-def regminmax(im, dim, min_max):		# im must be uint8 or int16 or uint16
+def regminmax(im, dim, min_max):
+	''' regminmax(...): take image and find regional maxima, mostly based on overall image
+		structure but also on the kernel size specified in dim param. This function uses 
+		Sobel approximations for derivatives (defined in separate function) rather than gradients.
+		args:
+		  im (numpy.ndarray): grayscale image input as numpy.ndarray. must be uint8, 
+		  	  int16, or uint16
+		  dim (int): kernel size for derivative approximations. In theory, this only matters for 
+		  	  image smoothing; that is, a noiseless image should produce identical results 
+		  	  regardless of the kernel dimensions.
+		  min_max (int): flag for finding either the minimum or maximum. Specified vals are REG_MIN or
+		  	  REG_MAX.
+		returns:
+		  anonymous numpy.ndarray: boolean image of locations identified as local maxima/minima.
+		  	  Use numpy.where to obtain list of coordinates.
+	'''
 	BETA = 256
 	sobel_mag = cv2.magnitude(sobel(im, 5, SOBEL_X), sobel(im, 5, SOBEL_Y))
-	laplacian = laplacian_approx(im, 21, min_max)
+	hessian = hessian_matrix(im, 19, 9)
 	sobel_mag = cv2.normalize(sobel_mag, alpha=0, beta=BETA, norm_type=cv2.NORM_MINMAX) # use range in boolean instead?
 	# laplacian = cv2.normalize(laplacian, alpha=-BETA, beta=BETA, norm_type=cv2.NORM_MINMAX)
 	peak_minima = minimum_filter(sobel_mag, 17)
 	# where:
 	# 1. pix is min in neighborhood, 2. pix sobel is > highest sobel/5, 3, concave correct
-	peak_real_minima = (peak_minima == sobel_mag) * (sobel_mag < BETA/5) * (laplacian > 0.0025)
-	return np.where(peak_real_minima)
+	return (peak_minima == sobel_mag) * (sobel_mag < BETA/5) * (hessian > 0.0025)
+	
 
 def laplacian_approx(im, ksize, min_max):		# targets -> positive
 	kernel1D = cv2.getGaussianKernel(ksize, 4.5) - cv2.getGaussianKernel(ksize, 2.5)
