@@ -14,7 +14,8 @@ import cv2
 from matplotlib import pyplot as plt
 import numpy as np # actually only used for pickling in process pools
 
-from ButterfliesByTemplate import loadTemps, getSizedTemps, detectButterflies, detectTrays
+from ButterfliesByTemplate import loadTemps, getSizedTemps, detectButterflies
+from ButterfliesByTemplate import detectTrays, find_species
 from image_pack import image_pack, draw_cont_from_arr, draw_rect_from_arr
 import analysis
 from ProgressBar import progress, startProgress, endProgress
@@ -32,6 +33,7 @@ results_folder = 'results'
 LOAD_TEMPS = True
 ADD_TEMP_NAME = True
 ADD_INDEX = True
+MAX_SPECIES_HAMMING = 0.25
 
 FLAG_IR_FLUOR_CCORR = 0.40
 FLAG_IR_FLUOR_CHISQR = 1900000
@@ -119,6 +121,7 @@ def main():
     detectionPool = Pool(processes=3)
     # res_temps = detectionPool.apply_async(getSizedTemps, args=(thresh_temp_folder,))
     templates = getSizedTemps(cwd + thresh_temp_folder)
+    # detectButterflies(imgc.color['vis'].dumps(), templates)
     res_but = detectionPool.apply_async(detectButterflies,
                                         args=(imgc.color['vis'].dumps(), templates))
     # res_tr = detectionPool.apply_async(detectTrays, args=(imgc.color['vis'].dumps(),))
@@ -132,13 +135,21 @@ def main():
     # trays = res_tr.get()[0]
     # tray_areas = np.loads(res_tr.get()[1])
     # print 5
-    butterflies = res_but.get()
+
+    print res_but.get()
+    butterflies, clusters = res_but.get()
     detectionPool.join()
     print "detection done"
 
-    tray_dict = {}
+    tray_dict = {}          # {butterfly index : tray number}
+    in_tray = {}            # {tray number : set of butterfly indices}
     for (i, (x1, y1, x2, y2, _, _)) in enumerate(butterflies):
-        tray_dict[i] = tray_areas[(y1+y2)//2, (x1+x2)//2]
+        tray_number = tray_areas[(y1+y2)//2, (x1+x2)//2]
+        tray_dict[i] = tray_number
+        try:
+            in_tray[tray_number].add(i)
+        except KeyError:
+            in_tray[tray_number] = {i}
 
     im_rects = imgc.color['vis'].copy()
     im_trays = imgc.color['vis'].copy()
@@ -220,7 +231,7 @@ def main():
     startProgress("contrast         (4 of 4)")
     flr, _, flb = cv2.split(img_full.color['fluor'])
     _, _, vib = cv2.split(img_full.color['vis'])
-    bg = (flb > 200) | (vib > 133) | (flr > 70)
+    bg = (flb > 200) | (vib > 133) | (flr > 70).astype('uint8') # typecase for speed 
     # cont_results = contrastPool.map(
     #             compare_contrast_wrapper, ((butterfly, i, bg, img_full.gray, crops_dirc)
     #             for i,butterfly in enumerate(butterflies)))

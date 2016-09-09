@@ -23,6 +23,7 @@ BLUR_LEVEL = 6          # gaussian blur level on match image
 FLAG_WIDTH = 38         # threshold for threshold shifting (length??)
 WIDTH_FLAG_SHIFT = 7.5  # shift the threshold this much when the width < FLAG_WIDTH
 MAX_AREA_OVERLAP = 0.25         # max area of overlap
+SPECIES_DIFF = 0.30
 
 MIN_32ND_SMALLER = 85
 MAX_32ND_SMALLER = 110
@@ -110,11 +111,62 @@ def dHash(img, resize=True, flatten=True):
     else:
         return grad
 
-def weighted_absolute_dist(truefalse, weighted):        # this might be MSE in disguise?
+def weighted_absolute_dist(truefalse, weighted):        
     weights = weighted - 0.5
     distArr = truefalse - weighted
     weightedDistArr = np.abs(weights * distArr)
     return np.sum(weightedDistArr)
+
+def hamming(arr1, arr2, bool=True):
+    # extended hamming for non-boolean arrays
+    L = len(arr1)
+    if L != len(arr2):
+        raise ValueError("arr1 and arr2 in hamming must be of same length")
+    if bool:
+        return np.count_nonzero(arr1!=arr2) / float(L)
+    else:
+        return np.sum(np.abs(arr1 - arr2)) / float(L)
+
+def hash_cluster(d, max_hamming=0.25, num_clusters=0, both=False):
+    ''' hash_cluster: clusters 64-dimensional hash codes using hamming distances,
+        which can be transformed to have Euclidean-like meaning.
+        args:
+          d: dict of index:hash to cluster
+          max_hamming: float val of maximum hamming dist between centroids
+          num_clusters: number of clusters to go to. (Overrides max_hamming if not 0,
+          unless the both flag is true, in which case whichever is reached first
+          will be used.)
+    '''
+    # TODO implement cluster density limit
+    if num_clusters != 0:
+        max_hamming = 1
+    clusters = []
+    for k, h in d.iteritems():
+        clusters.append((set([k]), h))
+    d = 0
+    while (d < max_hamming) & (len(clusters) > num_clusters):
+        d = 1.00
+        ind1 = -1
+        ind2 = -1
+        for i, (s, h) in enumerate(clusters):
+            for j in range(i+1, len(clusters)):
+                ham_dist = hamming(h, clusters[j][1], bool=False)
+                if ham_dist < d:
+                    d = ham_dist
+                    ind1 = i
+                    ind2 = j
+        try:
+            L1 = len(clusters[ind1][0])
+            L2 = len(clusters[ind2][0])
+            h1 = clusters[ind1][1]
+            h2 = clusters[ind2][1]
+        except KeyError:
+            print "nothing merged. ", len(clusters)
+        else:
+            new_ham = (h1*L1 + h2*L2)/float(L1+L2)
+            clusters[ind1] = ((clusters[ind1][0] | clusters[ind2][0]), new_ham)
+            del clusters[ind2]
+    return clusters
 
 def rangeoverlap(x1,x2,xr1,xr2):
     o = 0
@@ -128,28 +180,19 @@ def rangeoverlap(x1,x2,xr1,xr2):
         o = x2 - xr1
     return o
 
-def append_anti_alias(arr, rect, grayimg):      # grayimg for hashing
+def append_anti_alias(arr, rect, phash, dhash):      # grayimg for hashing
     Alias = False
-    xr1,yr1,xr2,yr2,qr,fr = rect
-    if rect[0] > rect[2]:
-        xr1 = rect[2]
-        xr2 = rect[0] # if the rectangle is upside down/
-    if rect[1] > rect[3]:
-        yr1 = rect[3]
-        yr2 = rect[1] # backwards, correct
+    xr1,yr1,xr2,yr2,qr,fr,ph = rect
     w = xr2-xr1
     h = yr2-yr1
-    cropped = grayimg[int(yr1+h/10.):int(yr2-h/10.),int(xr1+w/10.):int(xr2-w/10.)]
-    dist_dhash = weighted_absolute_dist(dHash(cropped), dHash_table)
-    dist_phash = weighted_absolute_dist(pHash(cropped), pHash_table)
-    dist_dhash_b = weighted_absolute_dist(dHash(np.array(zip(*cropped[::-1]))), dHash_table) # for vertical-facing butterflies
-    dist_phash_b = weighted_absolute_dist(pHash(np.array(zip(*cropped[::-1]))), pHash_table)
-    hash_index = min(dist_phash*dist_dhash, dist_phash_b*dist_dhash_b)
+    dist_dhash = weighted_absolute_dist(dhash, dHash_table)
+    dist_phash = weighted_absolute_dist(phash, pHash_table)
+    hash_index = dist_phash*dist_dhash
     if hash_index > HASH_THRESHOLD:
         return
     qr = hash_index*qr**2
     for r in arr:
-        x1,y1,x2,y2,q,_ = r
+        x1,y1,x2,y2,q,_,_ = r
         if (x1 <= xr2) and (xr1 <= x2) and (y1 <= yr2) and (yr1 <= y2): #there is x and y overlap
             ox = rangeoverlap(x1,x2,xr1,xr2)
             oy = rangeoverlap(y1,y2,yr1,yr2)
@@ -160,9 +203,9 @@ def append_anti_alias(arr, rect, grayimg):      # grayimg for hashing
                 Alias = True
                 if q > qr:      #leaves original in if match is of equal or better quality (lower q)
                     arr.remove(r)
-                    arr.append((xr1,yr1,xr2,yr2,qr,fr))
+                    arr.append((xr1,yr1,xr2,yr2,qr,fr,ph))
     if not Alias:
-        arr.append((xr1,yr1,xr2,yr2,qr,fr))
+        arr.append((xr1,yr1,xr2,yr2,qr,fr,ph))
 
 # comb_for_aliases(arr) looks for and removes aliases in the passed array
  # based on the MAX_AREA_OVERLAP parameter at the top of this file. Always keeps
@@ -173,13 +216,13 @@ def comb_for_aliases(arr):          #shuffle?   #replace append_anti_alias?
     any_found = False
     for i in range(0, len(arr)):    #prioritizes x2 high q
         try:                        
-            x1,y1,x2,y2,_,_ = arr[i]
+            x1,y1,x2,y2,_,_,_ = arr[i]
             a1 = (x2-x1)*(y2-y1)
         except IndexError:
             break       #outside arr range
         for j in range(i+1, len(arr)):          #probably would look better with enumerate()?
             try:
-                xr1,yr1,xr2,yr2,_,_ = arr[j]
+                xr1,yr1,xr2,yr2,_,_,_ = arr[j]
             except IndexError:
                 break
             if (x1 <= xr2) and (xr1 <= x2) and (y1 <= yr2) and (yr1 <= y2):     # x and y overlap
@@ -238,6 +281,18 @@ def convert_temps(temp_path, target_path):
 
 #  ===============================================================================================
 # public methods for interface with main project file
+
+def compare_phash(img1, img2):
+    return hamming(pHash(img1), pHash(img2))
+
+def find_species(s):
+    ''' find_species: find the differentiated species in a tray using a hash clustering
+        technique on the detected butterflies
+        args:
+          s: set of hashes to cluster
+    '''
+    clusters = hash_cluster({i:h for (i, h) in enumerate(s)}, max_hamming=SPECIES_DIFF)
+
 
 def detectTrays(image_pickle):        # returns contour list of trays and tray lookup image
     ''''''
@@ -346,9 +401,12 @@ def detectButterflies(image_pickle, temps):
         loc = np.where(rmin*thr)
         for pt in zip(*loc[::-1]):
             q = resultsf[pt[1]][pt[0]]
-            # if q < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT):
-            append_anti_alias(butterflies, (pt[0], pt[1], pt[0]+w, pt[1]+h, q, t[4]), image_unpickle) #format x1, y1, x2, y2, quality
-        j += 1
+            x1, y1, x2, y2 = (pt[0], pt[1], pt[0]+w, pt[1]+h)
+            cropped = image_unpickle[int(y1+h/10.):int(y2-h/10.),int(x1+w/10.):int(x2-w/10.)]
+            ph = pHash(cropped)
+            dh = dHash(cropped)
+            append_anti_alias(butterflies, (x1, y1, x2, y2, q, t[4], ph), ph, dh) #format x1, y1, x2, y2, quality
+        j += 1                      # TODO do both ph and dh?
         progress(50.*j/len(temps))
     
     #rotate (well actually flip across x=y) once and repeat
@@ -364,18 +422,22 @@ def detectButterflies(image_pickle, temps):
         loc = np.where(rmin*thr)
         for pt in zip(*loc[::-1]):      
             q = resultsf[pt[1]][pt[0]]
-            # if q < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT):
-            append_anti_alias(butterflies, (pt[1], (wimg-1)-(pt[0]), pt[1]+h, (wimg-1)-(pt[0]+w), q, t[4]), image_unpickle) #format x1, y1, x2, y2, quality
-                                                                        #order of y switched from before because of flip and sorter
+            x1, y1, x2, y2 = (pt[1], (wimg-1)-(pt[0]+w), pt[1]+h, (wimg-1)-(pt[0]))
+            cropped = image_unpickle[int(y1+h/10.):int(y2-h/10.),int(x1+w/10.):int(x2-w/10.)]
+            ph = pHash(np.array(zip(*cropped[::-1])))
+            dh = dHash(np.array(zip(*cropped[::-1])))
+            append_anti_alias(butterflies, (x1, y1, x2, y2, q, t[4], ph), ph, dh) #format x1, y1, x2, y2, quality
+                                                                    #order of y switched from before because of flip and sorter
         j += 1
         progress(50.*j/len(temps))
 
     while comb_for_aliases(butterflies): #less memory intensive and more efficient to do with smaller arrays
         pass    # runs until no aliases left; not sure why I need to run that function more than once...
-
-    butterflies.sort(key=lambda b: b[1])
-    endProgress()    
-    # print "here3"
-    return butterflies
+    
+    butterflies.sort(key=lambda b: b[1])        # sort by y1 coordinate  
+    clusters = hash_cluster({i:ph for i, (_,_,_,_,_,_,ph) in enumerate(butterflies)}, 
+                            max_hamming=0.15)
+    endProgress()
+    return butterflies, clusters
 
 
