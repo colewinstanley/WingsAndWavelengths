@@ -397,6 +397,7 @@ def detectButterflies(image_pickle, temps):
         resultsf = cv2.GaussianBlur(results, (0,0), sigmaX=BLUR_LEVEL)
         rmin = regminmax(resultsf, 9, REG_MIN)
         h, w = t[2], t[3]
+        square_radius = min(h,w) * 0.4
         thr = (resultsf < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT))
         loc = np.where(rmin*thr)
         for pt in zip(*loc[::-1]):
@@ -418,12 +419,14 @@ def detectButterflies(image_pickle, temps):
         resultsf = cv2.GaussianBlur(results, (0,0), sigmaX=BLUR_LEVEL)
         rmin = regminmax(resultsf, 9, REG_MIN)
         h, w = t[2], t[3]
+        square_radius = min(h,w) * 0.4
         thr = (resultsf < (TEMPL_THRESHOLD - width_flag*WIDTH_FLAG_SHIFT))
         loc = np.where(rmin*thr)
         for pt in zip(*loc[::-1]):      
             q = resultsf[pt[1]][pt[0]]
             x1, y1, x2, y2 = (pt[1], (wimg-1)-(pt[0]+w), pt[1]+h, (wimg-1)-(pt[0]))
             cropped = image_unpickle[int(y1+h/10.):int(y2-h/10.),int(x1+w/10.):int(x2-w/10.)]
+            species_hash_crop = image_unpickle[]
             ph = pHash(np.array(zip(*cropped[::-1])))
             dh = dHash(np.array(zip(*cropped[::-1])))
             append_anti_alias(butterflies, (x1, y1, x2, y2, q, t[4], ph), ph, dh) #format x1, y1, x2, y2, quality

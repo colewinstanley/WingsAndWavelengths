@@ -36,7 +36,7 @@ class image_pack:
             self.gray[key] = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
 
 def draw_rect_from_arr(img, arr, add_temp_name, add_index, color=(0,0,255), width=2, td=None):       # specimens 
-    for (i, (x1,y1,x2,y2,q,f)) in enumerate(arr):
+    for (i, (x1,y1,x2,y2,q,f,_)) in enumerate(arr):
         cv2.rectangle(img, (x1,y1), (x2,y2), color, width)
         if add_temp_name is True:
             cv2.putText(img, f, (x2+2,y2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,255), 2)

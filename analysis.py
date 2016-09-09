@@ -150,7 +150,7 @@ def norm_pack(pack_full_gray):
 
 def create_hist_dict(butterfly, normed_pack, index):
 	r = 4912/800.
-	(x1,y1,x2,y2,_,_) = butterfly
+	(x1,y1,x2,y2,_,_,_) = butterfly
 	mask = np.zeros(normed_pack['vis'].shape)
 	mask[int(y1*r):int(y2*r),int(x1*r):int(x2*r)] = 255
 	mask = mask.astype('uint8')
@@ -164,7 +164,7 @@ def compare_hists(d, butterfly, normed):
     comp_chisqr = {}
     comp_corr = {}
     ssim = {}
-    x1,y1,x2,y2,_,_ = butterfly
+    x1,y1,x2,y2,_,_,_ = butterfly
     d_list = list(enumerate(d.iteritems()))
     for ind,(k1,hist1) in d_list:
         if k1 is not 'i':

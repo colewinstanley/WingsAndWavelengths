@@ -64,7 +64,7 @@ def subtract_save(key, im, crops_dirc, butterflies):
     # im = np.loads(im_p)
     r = im.shape[1]/800.
     color_map = cv2.applyColorMap(im.astype('uint8'), cv2.COLORMAP_JET)
-    for (i, (x1, y1, x2, y2, _, _)) in enumerate(butterflies):
+    for (i, (x1, y1, x2, y2, _, _, _)) in enumerate(butterflies):
         os.chdir(crops_dirc + '/' + str(i+1))
         cv2.imwrite(str(i+1) + "_" + key + '_sub.jpg', color_map[int(y1*r):int(y2*r),
                                                                  int(x1*r):int(x2*r)])
@@ -87,7 +87,7 @@ def compare_contrast_wrapper(butterfly, index, bg, pack_full_gray, crops_dirc):
     ''' wrapper around the compare_contrast function to run the process and aggregate results
         into the keypoints images and the total contrast value for easy saving and integration
         into the report csv'''
-    x1, y1, x2, y2, _, _ = butterfly
+    x1, y1, x2, y2, _, _, _ = butterfly
     r = pack_full_gray['vis'].shape[1]/800.
     vis = pack_full_gray['vis'][int(y1*r):int(y2*r), int(x1*r):int(x2*r)]
     fln = analysis.norm_mean_only(vis, pack_full_gray['fluor'][int(y1*r):int(y2*r),
@@ -143,7 +143,7 @@ def main():
 
     tray_dict = {}          # {butterfly index : tray number}
     in_tray = {}            # {tray number : set of butterfly indices}
-    for (i, (x1, y1, x2, y2, _, _)) in enumerate(butterflies):
+    for (i, (x1, y1, x2, y2, _, _, _)) in enumerate(butterflies):
         tray_number = tray_areas[(y1+y2)//2, (x1+x2)//2]
         tray_dict[i] = tray_number
         try:
@@ -162,7 +162,7 @@ def main():
 
     startProgress("saving cropped images    ")
     os.chdir(crops_dirc)
-    for (i, (x1, y1, x2, y2, _, _)) in enumerate(butterflies):
+    for (i, (x1, y1, x2, y2, _, _, _)) in enumerate(butterflies):
         progress(100 * float(i) / len(butterflies))
         os.chdir(crops_dirc)
         try:
@@ -231,7 +231,7 @@ def main():
     startProgress("contrast         (4 of 4)")
     flr, _, flb = cv2.split(img_full.color['fluor'])
     _, _, vib = cv2.split(img_full.color['vis'])
-    bg = (flb > 200) | (vib > 133) | (flr > 70).astype('uint8') # typecase for speed 
+    bg = (flb > 200) | (vib > 133) | (flr > 70).astype('uint8') # typecast for speed 
     # cont_results = contrastPool.map(
     #             compare_contrast_wrapper, ((butterfly, i, bg, img_full.gray, crops_dirc)
     #             for i,butterfly in enumerate(butterflies)))
