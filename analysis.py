@@ -37,7 +37,7 @@ def subtractive(d, image_s):                 # returns dictionary of subtracted 
         smax = np.amax(sub)
      #   print smax
         if key != 'vis':       #if image is not uniformly 0 (as in vis)
-            ret[key] = sub*(255./smax)
+            ret[key] = sub.astype('float')*(255./smax)
         progress(50*(js/len(d)))
         js += 1
     return ret
