@@ -219,7 +219,7 @@ def main():
     hists = [analysis.create_hist_dict(butterfly, normed, i)
              for i, butterfly in enumerate(butterflies)]
     [save_hist(d, crops_dirc, n=True) for d in hists]
-    # cProfile.runctx('[save_hist(d, crops_dirc, n=True) for d in hists]', globals(), locals())
+    cProfile.runctx('[analysis.create_hist_dict(butterfly, normed, i) for i, butterfly in enumerate(butterflies)]', globals(), locals())
     hist_results = [analysis.compare_hists(d, butterflies[d['i']], normed) for d in hists]
     hists_compare_chisqr = {t[0]:t[1] for t in hist_results}
     hists_compare_corr = {t[0]:t[2] for t in hist_results}

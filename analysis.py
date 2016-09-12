@@ -20,7 +20,7 @@ def normalize_against(standard, image):     # eventually do this against the gra
     im = (image.astype('float32') + rand) - (mean + 0.5)      # 0.5 to account for mean of noise added
     # print 1, im                             # works because mean(A union B) = (mean(A) + mean(B)) / 2 if size(A) = size(B)
     im = im * (standard_dev / dev)
-    return im + standard_mean
+    return (im + standard_mean).astype('uint8')
 
 def norm_mean_only(standard, image):        # without standard deviation
     std_mean = np.mean(standard)
@@ -37,7 +37,7 @@ def subtractive(d, image_s):                 # returns dictionary of subtracted 
         smax = np.amax(sub)
      #   print smax
         if key != 'vis':       #if image is not uniformly 0 (as in vis)
-            ret[key] = sub.astype('float')*(255./smax)
+            ret[key] = sub*(255./smax)
         progress(50*(js/len(d)))
         js += 1
     return ret
@@ -156,7 +156,7 @@ def create_hist_dict(butterfly, normed_pack, index):
 	mask = mask.astype('uint8')
 	h = {'i':index}
 	for key,f in normed_pack.iteritems():
-	    h[key] = cv2.calcHist([f.astype('uint8')],[0],mask,[256],[0,256])
+	    h[key] = cv2.calcHist([f],[0],mask,[256],[0,256])
 	return h
 
 def compare_hists(d, butterfly, normed):
