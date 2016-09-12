@@ -20,6 +20,8 @@ from image_pack import image_pack, draw_cont_from_arr, draw_rect_from_arr
 import analysis
 from ProgressBar import progress, startProgress, endProgress
 
+import cProfile
+
 # temporary paths for testing until real file uptake is implemented
 thresh_temp_folder = 'temps/thresh_temps'
 temp_folder = 'temps/working_template'
@@ -69,19 +71,23 @@ def subtract_save(key, im, crops_dirc, butterflies):
         cv2.imwrite(str(i+1) + "_" + key + '_sub.jpg', color_map[int(y1*r):int(y2*r),
                                                                  int(x1*r):int(x2*r)])
 
-def save_hist(d, crops_dirc):
-    '''save dictionary of histograms into the respective crop folders (in crops_dirc)'''
+def save_hist(d, crops_dirc, n=False):
+    '''save dictionary of histograms into the respective crop folders (in crops_dirc)
+        when n is true, save just as numpy arr'''
     h_i = str(d['i']+1)
     os.chdir(crops_dirc + '/' + h_i)
     # nested, filtered generator gets ALL histogram bins in d_list across all the histograms
     max_level = max(hbin for _, hist in d.iteritems() if not isinstance(hist, int) for hbin in hist)
     for k, hist in d.iteritems():
         if k is not 'i':
-            plt.plot(hist)
-            plt.xlim([0, 256])
-            plt.ylim([0, max_level+100])
-            plt.savefig(k + "_hist" + ".jpg")
-            plt.clf()
+            if n:
+                np.save(k + "_hist", hist)
+            else:
+                plt.plot(hist)
+                plt.xlim([0, 256])
+                plt.ylim([0, max_level+100])
+                plt.savefig(k + "_hist" + ".jpg")
+                plt.clf()
 
 def compare_contrast_wrapper(butterfly, index, bg, pack_full_gray, crops_dirc):
     ''' wrapper around the compare_contrast function to run the process and aggregate results
@@ -121,7 +127,8 @@ def main():
     detectionPool = Pool(processes=3)
     # res_temps = detectionPool.apply_async(getSizedTemps, args=(thresh_temp_folder,))
     templates = getSizedTemps(cwd + thresh_temp_folder)
-    # detectButterflies(imgc.color['vis'].dumps(), templates)
+    # cProfile.runctx('detectButterflies(imgc.color[\'vis\'].dumps(), templates)', globals(), locals())
+    # raise IOError('end of test run')
     res_but = detectionPool.apply_async(detectButterflies,
                                         args=(imgc.color['vis'].dumps(), templates))
     # res_tr = detectionPool.apply_async(detectTrays, args=(imgc.color['vis'].dumps(),))
@@ -135,8 +142,6 @@ def main():
     # trays = res_tr.get()[0]
     # tray_areas = np.loads(res_tr.get()[1])
     # print 5
-
-    print res_but.get()
     butterflies, clusters = res_but.get()
     detectionPool.join()
     print "detection done"
@@ -213,7 +218,8 @@ def main():
     startProgress("histograms       (3 of 4)")
     hists = [analysis.create_hist_dict(butterfly, normed, i)
              for i, butterfly in enumerate(butterflies)]
-    [save_hist(d, crops_dirc) for d in hists]
+    [save_hist(d, crops_dirc, n=True) for d in hists]
+    # cProfile.runctx('[save_hist(d, crops_dirc, n=True) for d in hists]', globals(), locals())
     hist_results = [analysis.compare_hists(d, butterflies[d['i']], normed) for d in hists]
     hists_compare_chisqr = {t[0]:t[1] for t in hist_results}
     hists_compare_corr = {t[0]:t[2] for t in hist_results}

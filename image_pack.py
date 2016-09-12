@@ -18,7 +18,7 @@ class color:    # Color characters for writing to the console
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
-class image_pack:
+class image_pack(object):
     def __init__(self, vis, fluor, uv, near_ir, ir, w=0):
         path_dict = {'vis':vis, 'fluor':fluor, 'uv':uv, 'near_ir':near_ir, 'ir':ir}      
         self.color = {}

@@ -204,9 +204,8 @@ def regminmax(im, dim, min_max):
 	peak_minima = minimum_filter(sobel_mag, dim)
 	# where:
 	# 1. pix is min in neighborhood, 2. pix sobel is > highest sobel/5, 3, concave correct
-	return (peak_minima == sobel_mag) * (sobel_mag < BETA/5) * (hessian > 0.0025)
+	return (peak_minima == sobel_mag) * (sobel_mag < BETA/5) * (hessian > 0.0015)
 	
-
 def laplacian_approx(im, ksize, min_max):		# targets -> positive
 	kernel1D = cv2.getGaussianKernel(ksize, 4.5) - cv2.getGaussianKernel(ksize, 2.5)
 	if min_max == REG_MAX:
